@@ -1,0 +1,321 @@
+%
+% bxpdfcrypt.sty
+%
+
+%% package declarations
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{bxpdfcrypt}[2011/03/20 v0.1]
+
+% 000000000100 AllowPrinting
+% 000000001000 AllowModifyContents
+% 000000010000 AllowCopy
+% 000000100000 AllowModifyAnnotations
+% 000100000000 AllowFillIn
+% 001000000000 AllowScreenReaders
+% 010000000000 AllowAssembly
+% 100000000000 AllowDegradedPrinting
+
+%% preparations
+\def\bxcp@pkgname{bxpdfcrypt}
+\def\bxcp@error{\PackageError\bxcp@pkgname}
+\def\bxcp@warn{\PackageWarning\bxcp@pkgname}
+%
+\RequirePackage{keyval}
+\newif\ifbxcp@permrev@fixed
+\let\bxcp@permrev=3
+\def\bxcp@keylength{128}
+\let\bxcp@owner@pw\@empty
+\let\bxcp@user@pw\@empty
+%\let\bxcp@perm\@undefined
+\newif\ifbxcp@debug
+\newif\ifbxcp@everypage
+\newif\ifbxcp@invchar
+
+%%-------- Permission settings
+
+%% permission values
+\chardef\bxcp@o@false=0
+% boolean keywords
+\let\bxcp@b@false=f
+\let\bxcp@b@none=f
+\let\bxcp@b@true=t
+\let\bxcp@b@all=t
+\let\bxcp@b@full=t
+\let\bxcp@sb@false=f
+\let\bxcp@sb@true=t
+
+%% \bxcp@decl@permrev@ii
+% Declares permission values for rev. 2.
+\@onlypreamble\bxcp@decl@permrev@ii
+\def\bxcp@decl@permrev@ii{%                     %210987654321
+  \mathchardef\bxcp@o@print@true          ="004 %000000000100
+  \mathchardef\bxcp@o@extract@true        ="010 %000000100000
+  \mathchardef\bxcp@o@modify@annotate     ="020 %000000101000
+  \mathchardef\bxcp@o@modify@true         ="028 %000000010000
+  \chardef\bxcp@o@annotate@true=1
+}
+
+%% \bxcp@decl@permrev@iii
+% Declares permission values for rev. 3
+\@onlypreamble\bxcp@decl@permrev@iii
+\def\bxcp@decl@permrev@iii{%                    %210987654321
+\mathchardef\bxcp@o@print@low             ="004 %000000000100
+\mathchardef\bxcp@o@print@true            ="804 %100000000100
+\mathchardef\bxcp@o@extract@accessibility ="200 %001000000000
+\mathchardef\bxcp@o@extract@true          ="210 %001000010000
+\mathchardef\bxcp@o@modify@assembly       ="400 %010000000000
+\mathchardef\bxcp@o@modify@form           ="500 %010100000000
+\mathchardef\bxcp@o@modify@annotate       ="520 %010100100000
+\mathchardef\bxcp@o@modify@true           ="528 %010100101000
+\chardef\bxcp@o@accessibility@true =1
+\chardef\bxcp@o@annotate@true=1
+}
+
+%% bxcp@calc@perm
+% Gets the total permission value and sets \@bxcp@perm
+% to that value.
+\@onlypreamble\bxcp@calc@perm
+\def\bxcp@calc@perm{%
+  \ifnum\bxcp@coerce\bxcp@o@annotate>0
+    \ifnum\bxcp@coerce\bxcp@o@modify<\bxcp@o@modify@annotate
+      \let\bxcp@o@modify\bxcp@o@modify@annotate
+    \fi
+  \fi
+  \ifnum\bxcp@coerce\bxcp@o@accessibility>0
+    \ifnum\bxcp@coerce\bxcp@o@extract<\bxcp@o@extract@accessibility
+      \let\bxcp@o@extract\bxcp@o@extract@accessibility
+    \fi
+  \fi
+  \@tempcnta\bxcp@o@false
+  \advance\@tempcnta\bxcp@coerce\bxcp@o@print
+  \advance\@tempcnta\bxcp@coerce\bxcp@o@extract
+  \advance\@tempcnta\bxcp@coerce\bxcp@o@modify
+  \edef\bxcp@perm{\the\@tempcnta}}
+
+%% \bxcp@coerce\CS
+% Coerces an undeclared constant to zero.
+\@onlypreamble\bxcp@coerce
+\def\bxcp@coerce#1{%
+  \ifx#1\relax \bxcp@o@false
+  \else\ifx #1\@undefined \bxcp@o@false
+  \else #1\fi\fi}
+
+%% \bxcp@set@permkey{<key>}{<value>}
+% Process a permkey <key>=<value> and updates \[bxcp@o@<key>].
+\@onlypreamble\bxcp@set@permkey
+\def\bxcp@set@permkey#1#2{%
+  \bxcp@fix@permrev
+  \expandafter\let\expandafter\bxcp@tmpa
+   \csname bxcp@b@#2\endcsname
+  \ifx f\bxcp@tmpa
+    \def\bxcp@tmpb{false}%
+  \else\ifx t\bxcp@tmpa
+    \edef\bxcp@tmpb{#1@true}%
+  \else
+    \edef\bxcp@tmpb{#1@#2}%
+  \fi\fi
+  \expandafter\let\csname bxcp@o@#1\expandafter
+   \endcsname\csname bxcp@o@\bxcp@tmpb\endcsname
+  \expandafter\ifx\csname bxcp@o@#1\endcsname\relax
+    \bxcp@error{Invalid permission spec (#1=#2)}%
+      {The setting #1=#2 is invalid and thus ignored.
+       \MessageBreak Check also for key-length setting
+       (\bxcp@keylength).}%
+  \fi}
+
+%% \bxcp@fix@permrev
+% Invokes the setting for the permission value revision.
+\@onlypreamble\bxcp@fix@permrev
+\def\bxcp@fix@permrev{%
+  \bxcp@permrev@fixedtrue
+  \ifx 2\bxcp@permrev \bxcp@decl@permrev@ii
+  \else \bxcp@decl@permrev@iii
+  \fi
+  \let\bxcp@fix@permrev\relax}
+
+%% \bxcp@set@permrev{<rev>}
+% Sets the permission value revision.
+\@onlypreamble\bxcp@set@permrev
+\def\bxcp@set@permrev#1{%
+  \ifbxcp@permrev@fixed
+    \bxcp@error{Cannot set key-length here}%
+     {The key-length must be set before any permission settings.%
+      \MessageBreak The setting was ignored.}%
+  \else
+    \let\bxcp@permrev=#1%
+  \fi}
+
+%%------ Read passwords from files
+
+%% \bxcp@set@pwfile\CS{<filename>}
+\def\bxcp@set@pwfile#1#2{%
+  \openin\@inputcheck=#2\relax
+  \ifeof\@inputcheck
+    \bxcp@error{Password file '#2' not found}%
+      {The password is set to empty instead.}%
+    \let#1\@empty
+  \else
+    \begingroup
+      % make every character but CR non-special
+      \@tempcnta=0
+      \@whilenum\@tempcnta<256 \do{%
+        \catcode\@tempcnta=12
+        \advance\@tempcnta1\relax}%
+      % stop appending CR to input
+      \endlinechar=-1 \catcode13=5
+      \read\@inputcheck to\bxcp@tmpa
+      \global\let\bxcp@gtmpa\bxcp@tmpa
+    \endgroup
+    \let#1\bxcp@gtmpa
+  \fi
+  \closein\@inputcheck
+  \bxcp@escape#1}
+
+%% \bxcp@set@pw\CS{<password>}
+% Sets a password variable \CS.
+\@onlypreamble\bxcp@set@pw
+\def\bxcp@set@pw#1#2{%
+  \edef#1{#2}\bxcp@detokenize#1%
+  \bxcp@escape#1}
+
+%% \bxcp@escape
+\@onlypreamble\bxcp@escape
+\def\bxcp@escape#1{%
+  \let\bxcp@tmpa\@empty \bxcp@invcharfalse
+  \expandafter\bxcp@escape@a#1\relax
+  \let#1\bxcp@tmpa
+  \ifbxcp@invchar
+    \bxcp@error{Password contain invalid characters}%
+      {The offending characters are removed.}%
+  \fi}
+\@onlypreamble\bxcp@escape@a
+\def\bxcp@escape@a#1{%
+  \ifx#1\relax\else
+    \ifnum`#1<32 \bxcp@invchartrue
+    \else\ifnum`#1>127 \bxcp@invchartrue
+    \else\if #1(\edef\bxcp@tmpa{\bxcp@tmpa\string\(}%
+    \else\if #1)\edef\bxcp@tmpa{\bxcp@tmpa\string\)}%
+    \else\if #1\bxcp@@bs\edef\bxcp@tmpa{\bxcp@tmpa\string\\}%
+    \else \edef\bxcp@tmpa{\bxcp@tmpa#1}%
+    \fi\fi\fi\fi\fi
+    \expandafter\bxcp@escape@a
+  \fi}
+\edef\bxcp@@bs{\expandafter\@gobble\string\\}
+
+%% \bxcp@detokenize\CS
+\@onlypreamble\bxcp@detokenize
+\def\bxcp@detokenize#1{%
+  \expandafter\bxcp@detokenize@a\meaning#1\@nil#1}
+\def\bxcp@detokenize@a#1>#2\@nil#3{\def#3{#2}}
+
+
+%%------ Other parameters
+
+%% \bxcp@set@bool{<key>}{<value>}
+% Sets a boolean value, eg. everypage.
+\@onlypreamble\bxcp@set@bool
+\def\bxcp@set@bool#1#2{%
+  \expandafter\ifx\csname bxcp@sb@#2\endcsname\relax
+    \bxcp@error{Invalid boolean value (#2)}%
+      {A boolean value must be 'true' or 'false'.}%
+  \else
+    \csname bxcp@#1#2\endcsname
+  \fi}
+
+%% \bxcp@set@perm{<number>}
+% Sets the permission value (\bxcp@perm) directly.
+\@onlypreamble\bxcp@set@perm
+\def\bxcp@set@perm#1{%
+  \bxcp@fix@permrev
+  \edef\bxcp@perm{\number#1}}
+
+%% \bxcp@set@keylength
+% Sets the key-length value (\bxcp@keylength) and the permission
+% value revision (\bxcp@permrev) accordingly.
+\@onlypreamble\bxcp@set@keylength
+\def\bxcp@set@keylength#1{%
+  \@tempcnta=#1\relax
+  \ifnum\@tempcnta=40
+    \def\bxcp@keylength{40}%
+    \bxcp@set@permrev{2}%
+  \else\ifnum\@tempcnta=128
+    \def\bxcp@keylength{128}%
+    \bxcp@set@permrev{3}%
+  \else
+    \bxcp@error{Invalid key-length value (\the\@tempcnta)}%
+      {The key-length value must be either 40 or 128.}%
+  \fi\fi}
+
+%%------ Process options
+
+%% declare options
+% (keyval-type options)
+\define@key{bxcp}{debug}[true]{\bxcp@set@bool{debug}{#1}}
+\define@key{bxcp}{everypage}[true]{\bxcp@set@bool{everypage}{#1}}
+\define@key{bxcp}{user}[]{\bxcp@set@pw\bxcp@user@pw{#1}}
+\define@key{bxcp}{userfile}[user.txt]{\bxcp@set@pwfile\bxcp@user@pw{#1}}
+\define@key{bxcp}{owner}[]{\bxcp@set@pw\bxcp@owner@pw{#1}}
+\define@key{bxcp}{ownerfile}[owner.txt]{\bxcp@set@pwfile\bxcp@owner@pw{#1}}
+\define@key{bxcp}{length}{\bxcp@set@keylength{#1}}
+\define@key{bxcp}{perm}{\bxcp@set@perm{#1}}
+\def\bxcp@do#1{\define@key{bxcp}{#1}[true]{\bxcp@set@permkey{#1}{##1}}}
+\@for\bxcp@x:={print,extract,modify,annotate,accessibility}\do{%
+  \expandafter\bxcp@do\expandafter{\bxcp@x}}
+\def\bxcp@do#1{\setkeys{bxcp}{#1}}
+\DeclareOption*{\expandafter\bxcp@do\expandafter{\CurrentOption}}
+
+%% process declarations
+\ProcessOptions*
+\ifx\bxcp@perm\@undefined
+  \bxcp@calc@perm
+\fi
+
+%% bxcp@special
+% The content of the special.
+\edef\bxcp@special{%
+  pdf:encrypt
+  \ifx\bxcp@owner@pw\@empty\else ownerpw (\bxcp@owner@pw) \fi
+  \ifx\bxcp@user@pw\@empty\else userpw (\bxcp@user@pw) \fi
+  length \bxcp@keylength\space
+  perm \bxcp@perm}
+
+\ifbxcp@debug
+  \typeout{Package \bxcp@pkgname:
+   The following special is to output:^^J%
+   \@spaces\bxcp@special}
+\fi
+
+%%------ Output of special
+
+%% \bxcp@set@page@hook{<text>}
+% NB: <text> must be a sequence of \spaeial{...}.
+\ifbxcp@everypage
+% When with everypage option, use \AtBeginShipout
+\RequirePackage{atbegshi}
+\def\bxcp@set@page@hook#1{%
+  \AtBeginShipout{%
+    \setbox\AtBeginShipoutBox\vbox{%
+      \bxcp@yoko #1\unvbox\AtBeginShipoutBox}}}
+\else % When without everypage
+\def\bxcp@set@page@hook#1{%
+  \ifx\AtBeginShipoutFirst\@undefined
+    % without atbegshi: prepend to \@begindvibox
+    \global\setbox\@begindvibox\vbox{%
+      \bxcp@yoko #1\unvbox\@begindvibox}%
+  \else
+    % with atbegshi: prepend to \AtBegShi@HookFirst macro
+    {\toks@\expandafter{\AtBegShi@HookFirst}%
+     \xdef\AtBegShi@HookFirst{#1\the\toks@}}%
+  \fi}%
+\fi
+% remedy for pTeX...
+\edef\bxcp@yoko{\ifx\yoko\@undefined\else \yoko \fi}
+
+
+%% begin-document hook
+\AtBeginDocument{%
+  \bxcp@set@page@hook{\special{\bxcp@special}}}
+
+%%------ all done
+\endinput
+%% EOF
