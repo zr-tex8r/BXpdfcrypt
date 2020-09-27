@@ -289,6 +289,7 @@
 
 %% \bxcp@set@page@hook{<text>}
 % NB: <text> must be a sequence of \spaeial{...}.
+\ifx\AddToHook\@undefined  %-------- no hook system
 \ifbxcp@everypage
 % When with everypage option, use \AtBeginShipout
 \RequirePackage{atbegshi}
@@ -310,7 +311,15 @@
 \fi
 % remedy for pTeX...
 \edef\bxcp@yoko{\ifx\yoko\@undefined\else \yoko \fi}
-
+\else                      %-------- with hook system
+\ifbxcp@everypage
+  \def\bxcp@set@page@hook#1{%
+    \AddToHook{shipout/background}{\hb@xt@\z@{#1\hss}}}
+\else
+  \def\bxcp@set@page@hook#1{%
+    \AtBeginDvi{#1}}
+\fi
+\fi                        %--------
 
 %% begin-document hook
 \AtBeginDocument{%
